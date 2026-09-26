@@ -1,0 +1,17 @@
+services:
+  dns-zone-review:
+    build: .
+    image: dns-zone-review:latest
+    container_name: dns-zone-review
+    ports:
+      - "8080:8080"
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8080"
+      DATABASE: /data/reviews.db
+    volumes:
+      - dns-review-data:/data
+    restart: unless-stopped
+
+volumes:
+  dns-review-data:

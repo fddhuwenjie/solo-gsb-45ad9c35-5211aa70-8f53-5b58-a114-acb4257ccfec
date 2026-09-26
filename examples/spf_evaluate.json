@@ -1,0 +1,9 @@
+{
+  "zones": [
+    "$ORIGIN example.com.\n$TTL 300\n@ IN SOA ns1 admin 2024010100 600 300 86400 300\n@ IN NS ns1\nns1 IN A 192.0.2.10\n@ IN MX 10 mail\nmail IN A 192.0.2.50\n@ IN TXT \"v=spf1 include:example.net. mx ~all\"\n",
+    "$ORIGIN example.net.\n$TTL 300\n@ IN SOA ns1 admin 2024010100 600 300 86400 300\n@ IN NS ns1\nns1 IN AAAA 2001:db8::10\n@ IN TXT \"v=spf1 ip6:2001:db8::/32 -all\"\n"
+  ],
+  "client_ip": "2001:db8::beef",
+  "mail_from": "alice@example.com",
+  "helo": "mx.sender.example"
+}

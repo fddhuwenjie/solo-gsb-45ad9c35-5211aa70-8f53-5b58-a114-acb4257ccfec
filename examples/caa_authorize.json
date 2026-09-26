@@ -1,0 +1,10 @@
+{
+  "zones": [
+    "$ORIGIN example.com.\n$TTL 300\n@ IN SOA ns1 admin 2024010100 600 300 86400 300\n@ IN NS ns1\nns1 IN A 192.0.2.10\n@ IN CAA 0 issue \"letsencrypt.org\"\n@ IN CAA 0 issuewild \";\"\nwww IN CAA 0 issue \"letsencrypt.org; validationmethods=dns-01,http-01; accounturi=https://acme.example/account/42\"\nwww IN CAA 0 iodef \"mailto:security@example.com\"\nalias IN CNAME www\n"
+  ],
+  "domain": "www.example.com.",
+  "wildcard": false,
+  "ca_domain": "letsencrypt.org",
+  "account": "https://acme.example/account/42",
+  "validation_method": "http-01"
+}

@@ -1,0 +1,17 @@
+{
+  "zone_origin": "example.com.",
+  "nsec": [
+    {"owner": "example.com.", "next": "a.example.com.",
+     "types": ["SOA", "NS", "A", "NSEC"]},
+    {"owner": "a.example.com.", "next": "alias.example.com.",
+     "types": ["A", "NSEC"]},
+    {"owner": "alias.example.com.", "next": "mail.example.com.",
+     "types": ["CNAME", "NSEC"]},
+    {"owner": "mail.example.com.", "next": "www.example.com.",
+     "types": ["A", "MX", "NSEC"]},
+    {"owner": "www.example.com.", "next": "example.com.",
+     "types": ["A", "NSEC"]}
+  ],
+  "query": {"name": "ghost.example.com.", "type": "A",
+            "expected": "nxdomain"}
+}

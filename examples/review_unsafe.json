@@ -1,0 +1,4 @@
+{
+  "old_zone": "$ORIGIN example.com.\n$TTL 3600\n@ IN SOA ns1 hostmaster 2024010100 7200 3600 1209600 3600\n@ IN NS ns1\nns1 IN A 192.0.2.1\n",
+  "new_zone": "$ORIGIN example.com.\n$TTL 3600\n@ IN SOA ns1 hostmaster 2024010101 7200 3600 1209600 3600\n@ IN NS ns1\nns1 IN A 192.0.2.1\n; 新委派指向域内名字 ns.sub，但没有任何 A/AAAA 胶水 -> 最小冲突 RRset\nsub IN NS ns.sub\n"
+}

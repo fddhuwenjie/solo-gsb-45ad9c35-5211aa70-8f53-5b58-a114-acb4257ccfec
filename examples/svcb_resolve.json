@@ -1,0 +1,10 @@
+{
+  "zones": [
+    "$ORIGIN example.com.\n$TTL 300\n@ IN SOA ns1 admin 2024010100 600 300 86400 300\n@ IN NS ns1\nns1 IN A 192.0.2.10\nwww IN HTTPS 0 svc\nsvc IN HTTPS 1 . alpn=\"h2,h3\" port=8443 ipv4hint=192.0.2.80 ipv6hint=2001:db8::80\nsvc IN HTTPS 2 backup alpn=h2 mandatory=alpn,port port=443\nbackup IN A 192.0.2.90\n"
+  ],
+  "qname": "www.example.com.",
+  "qtype": "HTTPS",
+  "client_keys": ["mandatory", "alpn", "no-default-alpn", "port",
+                  "ipv4hint", "ipv6hint"],
+  "client_alpn": ["h2", "h3"]
+}

@@ -1,0 +1,10 @@
+{
+  "zones": [
+    "$ORIGIN example.com.\n$TTL 300\n@ IN SOA ns1 admin 2024010100 600 300 86400 300\n@ IN NS ns1\nns1 IN A 192.0.2.10\nwww IN A 192.0.2.80\n_443._tcp.www IN TLSA 3 1 1 964816b1919d9c28e788a96136ec866563688b51c37be39542646473c24d5e5b\n_443._tcp.www IN TLSA 3 0 1 bfe0f79c6aa75a93532f3da732f607719cc4e794e0652d42bd64d68d7deaa3a9\n"
+  ],
+  "hostname": "www.example.com",
+  "port": 443,
+  "protocol": "tcp",
+  "certificate": "-----BEGIN CERTIFICATE-----\nMIIBNDCB2qADAgECAhRxGTgl722PExj0/+qpzUuep+ydnTAKBggqhkjOPQQDAjAa\nMRgwFgYDVQQDDA93d3cuZXhhbXBsZS5jb20wHhcNMjYwOTI0MjMwOTUyWhcNMjcw\nOTI1MjMwOTUyWjAaMRgwFgYDVQQDDA93d3cuZXhhbXBsZS5jb20wWTATBgcqhkjO\nPQIBBggqhkjOPQMBBwNCAASiS/vyQ6dZ3sg7lJ1Ydtg1GE8RyWzzP3TaNZoXGtxv\n2tmCt6NOAGHlHNAsnQOHIzZyWcgYOD+50CUY0dtjnSapMAoGCCqGSM49BAMCA0kA\nMEYCIQCoMu+bBjPfvtPpcdWTh97DPeym2A9GwvXIh/qlrbPJwQIhAKxWzUd+jFCx\nJG0nBzaMDXID7Lea5CIYkrIbS8XHN2uv\n-----END CERTIFICATE-----\n",
+  "dnssec": "secure"
+}

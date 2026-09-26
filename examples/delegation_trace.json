@@ -1,0 +1,78 @@
+{
+  "qname": "www.example.com.",
+  "qtype": "A",
+  "root_addresses": ["192.0.2.1"],
+  "hops": [
+    {
+      "server": "192.0.2.1",
+      "question": {"name": "www.example.com.", "type": "A"},
+      "answer": [],
+      "authority": [
+        {"name": "com.", "type": "NS", "ttl": 172800,
+         "rdata": "a.gtld-servers.net."}
+      ],
+      "additional": [
+        {"name": "a.gtld-servers.net.", "type": "A", "ttl": 172800,
+         "rdata": "192.0.2.53"}
+      ]
+    },
+    {
+      "server": "192.0.2.1",
+      "question": {"name": "a.gtld-servers.net.", "type": "A"},
+      "answer": [],
+      "authority": [
+        {"name": "net.", "type": "NS", "ttl": 172800, "rdata": "ns1.net."}
+      ],
+      "additional": [
+        {"name": "ns1.net.", "type": "A", "ttl": 172800,
+         "rdata": "192.0.2.77"}
+      ]
+    },
+    {
+      "server": "192.0.2.77",
+      "question": {"name": "a.gtld-servers.net.", "type": "A"},
+      "answer": [],
+      "authority": [
+        {"name": "gtld-servers.net.", "type": "NS", "ttl": 172800,
+         "rdata": "a.gtld-servers.net."}
+      ],
+      "additional": [
+        {"name": "a.gtld-servers.net.", "type": "A", "ttl": 172800,
+         "rdata": "192.0.2.53"}
+      ]
+    },
+    {
+      "server": "192.0.2.53",
+      "question": {"name": "a.gtld-servers.net.", "type": "A"},
+      "answer": [
+        {"name": "a.gtld-servers.net.", "type": "A", "ttl": 172800,
+         "rdata": "192.0.2.53"}
+      ],
+      "authority": [],
+      "additional": []
+    },
+    {
+      "server": "192.0.2.53",
+      "question": {"name": "www.example.com.", "type": "A"},
+      "answer": [],
+      "authority": [
+        {"name": "example.com.", "type": "NS", "ttl": 172800,
+         "rdata": "ns1.example.com."}
+      ],
+      "additional": [
+        {"name": "ns1.example.com.", "type": "A", "ttl": 172800,
+         "rdata": "192.0.2.10"}
+      ]
+    },
+    {
+      "server": "192.0.2.10",
+      "question": {"name": "www.example.com.", "type": "A"},
+      "answer": [
+        {"name": "www.example.com.", "type": "A", "ttl": 300,
+         "rdata": "192.0.2.80"}
+      ],
+      "authority": [],
+      "additional": []
+    }
+  ]
+}

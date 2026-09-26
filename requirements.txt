@@ -1,0 +1,3 @@
+# TLSA 校验（/api/tlsa/verify）的 PEM 证书解析依赖；
+# 其余功能仅使用 Python 标准库
+cryptography>=41
