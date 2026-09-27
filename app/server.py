@@ -11,6 +11,7 @@
 - ``POST /api/tlsa/verify``        离线 TLSA（DANE）记录校验（RFC 6698，仅 usage=3）
 - ``POST /api/axfr/inspect``       离线检查 Base64 编码的 TCP AXFR 响应流
 - ``POST /api/dns/delegation-trace`` 离线校验迭代解析轨迹（转介/胶水/地址子查询）
+- ``POST /api/dns/cache/replay``   离线复演带 TTL 衰减的解析缓存（正/负缓存、CNAME 链）
 - ``GET  /api/reviews``            已确认审查列表
 - ``GET  /api/reviews/<id>``       读取已确认审查（含复演请求）
 - ``GET  /healthz``                健康检查
@@ -26,6 +27,7 @@ from urllib.parse import urlsplit
 from .nsec import verify_nsec_proof
 from .axfr import inspect_axfr
 from .delegation import trace_delegation
+from .dnscache import replay_cache
 from .review import ReviewError, perform_review
 from .spf import evaluate_spf
 from .storage import Store
@@ -114,6 +116,8 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_axfr_inspect()
         elif path == "/api/dns/delegation-trace":
             self._handle_delegation_trace()
+        elif path == "/api/dns/cache/replay":
+            self._handle_cache_replay()
         else:
             self._error(ReviewError("not_found", "未知路径", 404))
 
@@ -235,6 +239,17 @@ class Handler(BaseHTTPRequestHandler):
         # valid/invalid 都是 200 下的校验终态；
         # 只有请求格式（400）与记录内容错误（422）走 _error
         self._send_json(200, {"delegation_trace": result})
+
+    def _handle_cache_replay(self) -> None:
+        try:
+            payload = self._read_json()
+            result = replay_cache(payload)
+        except ReviewError as exc:
+            self._error(exc)
+            return
+        # hit/miss 都是 200 下的复演终态；
+        # 只有请求格式（400）与离线响应内容错误（422）走 _error
+        self._send_json(200, {"cache_replay": result})
 
     def log_message(self, fmt: str, *args) -> None:
         # ThreadingHTTPServer 下把日志写到 stderr 即可

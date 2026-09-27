@@ -20,7 +20,10 @@ ZONEMD 区域摘要（SHA-384/SHA-512，不校验 RRSIG）；以及
 complete/incomplete/invalid 并还原可交给审查接口的规范区域文本；以及
 `POST /api/dns/delegation-trace`，离线校验一条迭代解析轨迹
 （转介/胶水/地址子查询/CNAME 重启，共享 32 跳预算），返回
-final_answer、逐记录取舍原因与地址来源图。
+final_answer、逐记录取舍原因与地址来源图；以及
+`POST /api/dns/cache/replay`，在**完全禁止联网**的前提下复演一串
+按时间非递减排列的查询事件与离线权威响应，模拟带 TTL 衰减的
+解析器缓存（正向 RRset、CNAME 链与 RFC 2308 负缓存）。
 除 TLSA 校验的 PEM 证书解析使用 `cryptography`（见
 `requirements.txt`，镜像内自动安装）外，仅使用 Python 标准库
 （`http.server.ThreadingHTTPServer` + `sqlite3`）。
@@ -489,6 +492,92 @@ DNS 头、问题区与回答区（授权区/附加区不解析、不参与判定
 }
 ```
 
+## 离线 DNS 缓存复演（`POST /api/dns/cache/replay`）
+
+不发起任何真实 DNS 查询：输入一串**按时间非递减排列**的查询事件
+（`events` 数组，每项含 `time`（非负整数秒）、`name`、`type`
+（仅 `A`/`AAAA`/`NS`/`CNAME`）），在纯内存缓存上逐项复演。未命中时
+事件可附**离线权威响应** `response`（`{aa, rcode, answer[], authority[]}`，
+记录为 `{name,type,ttl,rdata}`；`rcode` 取 `NOERROR(0)` / `SERVFAIL(2)` /
+`NXDOMAIN(3)` / `REFUSED(5)`，缺省 `NOERROR`；`answer`/`authority` 缺省为空）。
+同一时刻的多个事件**按输入顺序**处理。
+
+缓存规则：
+
+- **每次查询前清除到期项**：`expire_at <= now` 即删，**恰在到期时刻算
+  miss**；TTL=0 的学习结果对同一时刻其后的事件仍可见（同刻顺序语义）；
+- **正向 RRset 与 CNAME 分别按自身 TTL 衰减**（链上每跳独立 TTL，
+  答案整体剩余 TTL 为终 RRset 与各链节剩余 TTL 的最小值）；
+- 命中判定先负后正：非 `CNAME` 查询遇 CNAME 时**沿缓存 CNAME 链**
+  逐跳取答案；链上任一节缺失（`miss_cname_broken_chain`）或成环
+  （`miss_cname_loop`）都是 miss；`type=CNAME` 的查询只看 CNAME 本身；
+- **负缓存准入（RFC 2308）**：只接纳 **AA=1** 且授权区 **SOA 覆盖查询名
+  （终名）**的 NXDOMAIN / NODATA；负 TTL 取 **SOA RR TTL 与 SOA RDATA
+  MINIMUM 的较小值**（多个覆盖 SOA 时取最长匹配）；**NXDOMAIN 适用于
+  同名全部类型，NODATA 只适用于该类型**（NXDOMAIN 存活时遮蔽同名
+  NODATA，到期后未到期的 NODATA 重新生效）；
+- NXDOMAIN 应答回答区只允许随附**指向不存在终名的 CNAME 链**
+  （RFC 2308：链上 CNAME 照常按正向缓存，负缓存以**终名**为键，
+  终名上出现任何正向数据记录为 `422` `nxdomain_with_answers`）；
+  随 CNAME 链的 NODATA/NXDOMAIN 均以终名为键；
+- `SERVFAIL`/`REFUSED` 等不可缓存应答：miss、无答案、不写缓存；
+- **写入冲突**：写入正向结果（含 CNAME）时删除同名冲突负项
+  （同名 NXDOMAIN 与该类型 NODATA，`positive_removes_negative`）；
+  写入 NXDOMAIN 时删除**同名**全部正向 RRset 与 CNAME
+  （`nxdomain_removes_positive`）；写入 NXDOMAIN 不删除同名 NODATA；
+- 同一 (name,type) RRset 的多条 RDATA 合并去重；TTL 不一致时按 RFC 2181
+  取**较小值**并给出 notice；多个不同 CNAME 目标为 `422`；
+- 离线响应回答区中存在**无法从查询名经 CNAME 链到达**的记录
+  （`answer_unreachable`）、响应内 CNAME **成环**（`cname_loop`）、
+  否认应答 **AA=0**（`negative_not_authoritative`）或**缺少覆盖 SOA**
+  （`negative_missing_soa`）均为 `422`，本次复演不产生任何缓存变更；
+  授权区中非 SOA 记录一律忽略（给出 notice，不缓存 SOA 本身）。
+  正向结果不要求 AA=1（非 AA 正向照常缓存并给出 notice）。
+
+响应 `cache_replay` 中：`events` 逐项（`seq` 从 1 开始）给出 `hit`、
+`reason`（命中：`hit_positive` / `hit_nxdomain` / `hit_nodata`；未命中：
+`miss_no_data` / `miss_cname_broken_chain` / `miss_cname_loop` /
+`miss_uncacheable_rcode`；附响应学习：`learned_positive` /
+`learned_nxdomain` / `learned_nodata`）、`answer`（正向答案含终 RRset
+`records`、逐跳 `cname_chain` 与各自剩余 TTL；否定答案含
+`negative=nxdomain/nodata`、`soa` 与可选 CNAME 链前缀）、整体
+`ttl_remaining`，以及 `changes.added` / `changes.deleted`——每条增删都带
+`reason`（学习 `learned`、到期 `expired`、冲突删除如上）；`notices` 给出
+非致命提示（如命中时响应被忽略 `response_ignored_on_hit`）。末尾
+`snapshot` 为**最终缓存快照**：`positive`（按规范名称序）与 `negative`
+条目各自的原始 `ttl`、`ttl_remaining`（相对最后事件时间）、`rdata`、
+`soa`。只有请求格式错误（`400`）与离线响应内容错误（`422`）走错误响应；
+`hit`/`miss` 都是 **HTTP 200** 下的复演终态。复演不跨请求保留状态。
+
+请求体（完整示例见 `examples/dns_cache_replay.json`）：
+
+```json
+{
+  "events": [
+    {"time": 0, "name": "www.example.com.", "type": "A",
+     "response": {"aa": true, "rcode": "NOERROR", "answer": [
+       {"name": "www.example.com.", "type": "CNAME", "ttl": 300,
+        "rdata": "cdn.example.net."},
+       {"name": "cdn.example.net.", "type": "A", "ttl": 60,
+        "rdata": "203.0.113.7"}], "authority": []}},
+    {"time": 0, "name": "ghost.example.com.", "type": "AAAA",
+     "response": {"aa": true, "rcode": "NXDOMAIN", "answer": [],
+                  "authority": [
+                    {"name": "example.com.", "type": "SOA", "ttl": 3600,
+                     "rdata": "ns1.example.com. admin.example.com. 1 3600 3600 604800 300"}]}},
+    {"time": 30, "name": "www.example.com.", "type": "A"},
+    {"time": 30, "name": "ghost.example.com.", "type": "A"},
+    {"time": 60, "name": "www.example.com.", "type": "A"}
+  ]
+}
+```
+
+上例结果：t=0 学习 `www CNAME cdn`(300s) 与 `cdn A`(60s)、ghost 的
+NXDOMAIN（负 TTL=min(3600,300)=**300**）；t=30 沿 CNAME 链正向命中
+（终 A 剩 30s），ghost 查 `A` 仍被 NXDOMAIN 负命中（覆盖全部类型，剩
+270s）；t=60 终 A 恰到期被清除，www 查询为 `miss_cname_broken_chain`
+（删除原因 `expired`），而 www 的 CNAME 本身仍在快照中（剩 240s）。
+
 ## API
 
 | 方法 | 路径 | 说明 |
@@ -503,6 +592,7 @@ DNS 头、问题区与回答区（授权区/附加区不解析、不参与判定
 | `POST` | `/api/tlsa/verify` | 离线核对 TLSA（DANE）记录（RFC 6698，仅 usage=3；selector 0/1，matching 0/1/2），返回逐条结果与有序轨迹 |
 | `POST` | `/api/axfr/inspect` | 离线检查 Base64 编码的 TCP AXFR 响应流（逐帧解析/名称解压/结构校验），返回状态、按帧轨迹与规范区域文本 |
 | `POST` | `/api/dns/delegation-trace` | 离线校验迭代解析轨迹（转介/胶水/地址子查询/CNAME 重启，共享 32 跳预算），返回 final_answer、逐记录取舍与地址来源图 |
+| `POST` | `/api/dns/cache/replay` | 离线复演带 TTL 衰减的解析缓存（正向 RRset/CNAME 链/RFC 2308 负缓存、到期清理与冲突增删），逐项返回 hit/miss 与最终快照 |
 | `GET`  | `/api/reviews` | 已确认审查列表 |
 | `GET`  | `/api/reviews/<id>` | 读取一条确认（含 `replay_request` 可原样复演） |
 | `GET`  | `/healthz` | 健康检查 |
@@ -605,6 +695,12 @@ curl -s http://localhost:8080/api/axfr/inspect \
 curl -s http://localhost:8080/api/dns/delegation-trace \
   -H 'Content-Type: application/json' \
   --data @examples/delegation_trace.json | python3 -m json.tool
+
+# 离线 DNS 缓存复演（CNAME 链 TTL 衰减、NXDOMAIN/NODATA 负缓存、
+# t=60 终 A 到期 -> 链断 miss，www CNAME 仍存活）
+curl -s http://localhost:8080/api/dns/cache/replay \
+  -H 'Content-Type: application/json' \
+  --data @examples/dns_cache_replay.json | python3 -m json.tool
 ```
 
 `/api/spf/evaluate` 的最小内联示例：
@@ -672,6 +768,27 @@ curl -s http://localhost:8080/api/tlsa/verify \
 #    改为 "bogus" 得 "invalid"
 ```
 
+`/api/dns/cache/replay` 的最小内联示例（NXDOMAIN 负 TTL 取 SOA TTL 与
+MINIMUM 较小值；恰在到期 t=300 算 miss 并清除）：
+
+```bash
+curl -s http://localhost:8080/api/dns/cache/replay \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "events": [
+      {"time": 0, "name": "ghost.example.com.", "type": "A",
+       "response": {"aa": true, "rcode": "NXDOMAIN", "answer": [],
+                    "authority": [
+                      {"name": "example.com.", "type": "SOA", "ttl": 3600,
+                       "rdata": "ns1.example.com. admin.example.com. 1 3600 3600 604800 300"}]}},
+      {"time": 299, "name": "ghost.example.com.", "type": "AAAA"},
+      {"time": 300, "name": "ghost.example.com.", "type": "AAAA"}
+    ]
+  }' | python3 -m json.tool
+# -> events[1].hit=true，reason="hit_nxdomain"（NXDOMAIN 同名覆盖全部类型），
+#    ttl_remaining=1；events[2].hit=false，删除原因 "expired"
+```
+
 ## 端口与数据
 
 - 默认端口：**8080**（`docker-compose.yml` 中映射 `8080:8080`，可用
@@ -699,9 +816,10 @@ app/
   tlsa.py       # 离线 TLSA（DANE）校验（RFC 6698，仅 usage=3；PEM 证书解析）
   axfr.py       # 离线 AXFR 响应流检查（TCP 帧切分/名称解压/SOA 首尾结构判定）
   delegation.py # 离线迭代解析轨迹校验（转介/胶水/地址子查询/CNAME 重启/32 跳预算）
+  dnscache.py   # 离线 DNS 缓存复演（正向 RRset/CNAME 链独立 TTL/RFC 2308 负缓存/到期与冲突）
   storage.py    # SQLite 持久化
   server.py     # ThreadingHTTPServer HTTP API
 requirements.txt # TLSA 证书解析依赖（cryptography；镜像内安装）
 tests/          # 单元与端到端测试
-examples/       # curl 示例请求（review.json / spf_evaluate.json / nsec_proof.json / svcb_resolve.json / caa_authorize.json / zonemd_verify.json / tlsa_verify.json / axfr_inspect.json / delegation_trace.json 等）
+examples/       # curl 示例请求（review.json / spf_evaluate.json / nsec_proof.json / svcb_resolve.json / caa_authorize.json / zonemd_verify.json / tlsa_verify.json / axfr_inspect.json / delegation_trace.json / dns_cache_replay.json 等）
 ```

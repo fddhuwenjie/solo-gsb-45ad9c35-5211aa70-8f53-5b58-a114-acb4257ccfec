@@ -228,5 +228,79 @@ mail IN A 192.0.2.50
                          json.dumps(b2, sort_keys=True))
 
 
+class CacheReplayApiTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.server = build_server("127.0.0.1", 0, ":memory:")
+        cls.port = cls.server.server_address[1]
+        cls.thread = threading.Thread(target=cls.server.serve_forever,
+                                      daemon=True)
+        cls.thread.start()
+        cls.base = f"http://127.0.0.1:{cls.port}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def test_replay_positive_and_negative(self):
+        payload = {"events": [
+            {"time": 0, "name": "www.example.com.", "type": "A",
+             "response": {"aa": True, "rcode": 0, "answer": [
+                 {"name": "www.example.com.", "type": "CNAME", "ttl": 300,
+                  "rdata": "cdn.example.net."},
+                 {"name": "cdn.example.net.", "type": "A", "ttl": 60,
+                  "rdata": "203.0.113.7"}],
+                          "authority": []}},
+            {"time": 0, "name": "ghost.example.com.", "type": "AAAA",
+             "response": {"aa": True, "rcode": 3, "answer": [],
+                          "authority": [
+                              {"name": "example.com.", "type": "SOA",
+                               "ttl": 3600,
+                               "rdata": "ns1.example.com. admin.example.com."
+                                        " 1 3600 3600 604800 300"}]}},
+            {"time": 10, "name": "www.example.com.", "type": "A"},
+            {"time": 20, "name": "ghost.example.com.", "type": "A"},
+        ]}
+        status, body = _request(self.base + "/api/dns/cache/replay", payload)
+        self.assertEqual(status, 200, body)
+        replay = body["cache_replay"]
+        events = replay["events"]
+        self.assertFalse(events[0]["hit"])
+        self.assertFalse(events[1]["hit"])
+        self.assertEqual(events[1]["reason"], "learned_nxdomain")
+        self.assertEqual(events[1]["ttl_remaining"], 300)
+        self.assertTrue(events[2]["hit"])
+        self.assertEqual(events[2]["answer"]["ttl_remaining"], 50)
+        self.assertTrue(events[3]["hit"])
+        self.assertEqual(events[3]["reason"], "hit_nxdomain")
+        snap = replay["snapshot"]
+        self.assertEqual(snap["time"], 20)
+        self.assertEqual(len(snap["positive"]), 2)
+        self.assertEqual(len(snap["negative"]), 1)
+
+    def test_replay_422_on_non_aa_negative(self):
+        payload = {"events": [
+            {"time": 0, "name": "x.example.com.", "type": "A",
+             "response": {"aa": False, "rcode": 3, "authority": [
+                 {"name": "example.com.", "type": "SOA", "ttl": 60,
+                  "rdata": "ns1.example.com. admin.example.com."
+                           " 1 60 60 60 60"}]}},
+        ]}
+        status, body = _request(self.base + "/api/dns/cache/replay", payload)
+        self.assertEqual(status, 422)
+        self.assertEqual(body["error"]["code"],
+                         "negative_not_authoritative")
+
+    def test_replay_400_on_decreasing_time(self):
+        payload = {"events": [
+            {"time": 5, "name": "a.example.com.", "type": "A"},
+            {"time": 4, "name": "a.example.com.", "type": "A"},
+        ]}
+        status, body = _request(self.base + "/api/dns/cache/replay", payload)
+        self.assertEqual(status, 400)
+        self.assertEqual(body["error"]["code"], "invalid_request")
+
+
 if __name__ == "__main__":
     unittest.main()

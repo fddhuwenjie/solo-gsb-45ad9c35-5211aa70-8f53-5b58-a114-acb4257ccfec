@@ -1,0 +1,53 @@
+{
+  "events": [
+    {
+      "time": 0,
+      "name": "www.example.com.",
+      "type": "A",
+      "response": {
+        "aa": true,
+        "rcode": "NOERROR",
+        "answer": [
+          {"name": "www.example.com.", "type": "CNAME", "ttl": 300,
+           "rdata": "cdn.example.net."},
+          {"name": "cdn.example.net.", "type": "A", "ttl": 60,
+           "rdata": "203.0.113.7"}
+        ],
+        "authority": []
+      }
+    },
+    {
+      "time": 0,
+      "name": "ghost.example.com.",
+      "type": "AAAA",
+      "response": {
+        "aa": true,
+        "rcode": "NXDOMAIN",
+        "answer": [],
+        "authority": [
+          {"name": "example.com.", "type": "SOA", "ttl": 3600,
+           "rdata": "ns1.example.com. admin.example.com. 1 3600 3600 604800 300"}
+        ]
+      }
+    },
+    {
+      "time": 0,
+      "name": "mx.example.com.",
+      "type": "AAAA",
+      "response": {
+        "aa": true,
+        "rcode": "NOERROR",
+        "answer": [],
+        "authority": [
+          {"name": "example.com.", "type": "SOA", "ttl": 3600,
+           "rdata": "ns1.example.com. admin.example.com. 1 3600 3600 604800 300"}
+        ]
+      }
+    },
+    {"time": 30, "name": "www.example.com.", "type": "A"},
+    {"time": 30, "name": "ghost.example.com.", "type": "A"},
+    {"time": 30, "name": "mx.example.com.", "type": "AAAA"},
+    {"time": 30, "name": "mx.example.com.", "type": "A"},
+    {"time": 60, "name": "www.example.com.", "type": "A"}
+  ]
+}
